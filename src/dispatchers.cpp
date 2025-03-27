@@ -154,10 +154,12 @@ namespace dispatchers {
 
         auto args = CVarList(arg);
         if (auto direction = parse_move_arg(args[0])) {
-            if (direction != Direction::Invalid)
-                g_ScrollerLayout->move_window(workspace, *direction);
-            else
+            if (direction != Direction::Invalid) {
+                bool nomode = args.contains("nomode");
+                g_ScrollerLayout->move_window(workspace, *direction, nomode);
+            } else {
                orig_moveActiveTo(arg);
+            }
         }
 
         return {};
@@ -177,22 +179,36 @@ namespace dispatchers {
         return {};
     }
 
-    SDispatchResult dispatch_admitwindow(std::string) {
+    SDispatchResult dispatch_admitwindow(std::string arg) {
         auto workspace = workspace_for_action();
         if (workspace == -1)
             return { .success = false, .error = "scroller:admitwindow: invalid workspace" };
 
-        g_ScrollerLayout->admit_window_left(workspace);
+        AdmitExpelDirection direction;
+        if (arg == "r" || arg == "right") {
+            direction = AdmitExpelDirection::Right;
+        } else {
+            // Default is left, in case there is no arg
+            direction = AdmitExpelDirection::Left;
+        }
+        g_ScrollerLayout->admit_window(workspace, direction);
 
         return {};
     }
 
-    SDispatchResult dispatch_expelwindow(std::string) {
+    SDispatchResult dispatch_expelwindow(std::string arg) {
         auto workspace = workspace_for_action();
         if (workspace == -1)
             return { .success = false, .error = "scroller:expelwindow: invalid workspace" };
 
-        g_ScrollerLayout->expel_window_right(workspace);
+        AdmitExpelDirection direction;
+        if (arg == "l" || arg == "left") {
+            direction = AdmitExpelDirection::Left;
+        } else {
+            // Default is right, in case there is no arg
+            direction = AdmitExpelDirection::Right;
+        }
+        g_ScrollerLayout->expel_window(workspace, direction);
 
         return {};
     }
@@ -216,37 +232,7 @@ namespace dispatchers {
         if (workspace == -1)
             return { .success = false, .error = "scroller:setmodemodifier: invalid workspace" };
 
-        const auto args = CVarList(arg);
-        ModeModifier modifier;
-        if (args.size() > 0) {
-            if (args[0] == "after")
-                modifier.set_position(ModeModifier::POSITION_AFTER);
-            else if (args[0] == "before")
-                modifier.set_position(ModeModifier::POSITION_BEFORE);
-            else if (args[0] == "end")
-                modifier.set_position(ModeModifier::POSITION_END);
-            else if (args[0] == "beginning" || args[0] == "beg")
-                modifier.set_position(ModeModifier::POSITION_BEGINNING);
-
-            if (args.size() > 1) {
-                if (args[1] == "focus")
-                    modifier.set_focus(ModeModifier::FOCUS_FOCUS);
-                else if (args[1] == "nofocus")
-                    modifier.set_focus(ModeModifier::FOCUS_NOFOCUS);
-
-                if (args.size() > 2) {
-                    if (args[2] == "manual")
-                        modifier.set_auto_mode(ModeModifier::AUTO_MANUAL);
-                    else if (args[2] == "auto") {
-                        modifier.set_auto_mode(ModeModifier::AUTO_AUTO);
-
-                        if (args.size() > 3) {
-                            modifier.set_auto_param(std::stoi(args[3]));
-                        }
-                    }
-                }
-            }
-        }
+        ModeModifier modifier(arg);
         g_ScrollerLayout->set_mode_modifier(workspace, modifier);
 
         return {};

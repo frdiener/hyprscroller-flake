@@ -502,7 +502,7 @@ void ScrollerLayout::resizeActiveWindow(const Vector2D &delta,
     if (s == nullptr) {
         // Window is not tiled
         *PWINDOW->m_vRealSize = Vector2D(std::max((PWINDOW->m_vRealSize->goal() + delta).x, 20.0), std::max((PWINDOW->m_vRealSize->goal() + delta).y, 20.0));
-        PWINDOW->sendWindowSize(PWINDOW->m_vRealSize->goal());
+        PWINDOW->sendWindowSize();
         PWINDOW->updateWindowDecos();
         return;
     }
@@ -538,7 +538,7 @@ void ScrollerLayout::fullscreenRequestForWindow(PHLWINDOW window,
 
                 window->unsetWindowData(PRIORITY_LAYOUT);
                 window->updateWindowData();
-                window->sendWindowSize(window->m_vRealSize->goal());
+                window->sendWindowSize();
             }
         } else {
             // apply new pos and size being monitors' box
@@ -551,7 +551,7 @@ void ScrollerLayout::fullscreenRequestForWindow(PHLWINDOW window,
                             PMONITOR->vecSize - PMONITOR->vecReservedTopLeft - PMONITOR->vecReservedBottomRight};
                 *window->m_vRealPosition = Vector2D(box.x, box.y);
                 *window->m_vRealSize = Vector2D(box.w, box.h);
-                window->sendWindowSize(window->m_vRealSize->goal());
+                window->sendWindowSize();
             }
         }
     } else {
@@ -673,6 +673,7 @@ static SP<HOOK_CALLBACK_FN> activeWindowHookCallback;
 static SP<HOOK_CALLBACK_FN> swipeBeginHookCallback;
 static SP<HOOK_CALLBACK_FN> swipeUpdateHookCallback;
 static SP<HOOK_CALLBACK_FN> swipeEndHookCallback;
+static SP<HOOK_CALLBACK_FN> mouseMoveHookCallback;
 
 void ScrollerLayout::onEnable() {
     // Hijack Hyprland's default dispatchers
@@ -711,6 +712,11 @@ void ScrollerLayout::onEnable() {
     swipeEndHookCallback = HyprlandAPI::registerCallbackDynamic(PHANDLE, "swipeEnd", [&](void* /* self */, SCallbackInfo& info, std::any param) {
         auto swipe_event = std::any_cast<IPointer::SSwipeEndEvent>(param);
         swipe_end(info, swipe_event);
+    });
+
+    mouseMoveHookCallback = HyprlandAPI::registerCallbackDynamic(PHANDLE, "mouseMove", [&](void* /* self */, SCallbackInfo& info, std::any param) {
+        Vector2D mousePos = std::any_cast<Vector2D>(param);
+        mouse_move(info, mousePos);
     });
 
     enabled = true;
@@ -757,6 +763,10 @@ void ScrollerLayout::onDisable() {
     if (swipeEndHookCallback != nullptr) {
         swipeEndHookCallback.reset();
         swipeEndHookCallback = nullptr;
+    }
+    if (mouseMoveHookCallback != nullptr) {
+        mouseMoveHookCallback.reset();
+        mouseMoveHookCallback = nullptr;
     }
 
     if (overviews != nullptr) {
@@ -908,13 +918,16 @@ void ScrollerLayout::move_focus(WORKSPACEID workspace, Direction direction)
     switch_to_window(from, to);
 }
 
-void ScrollerLayout::move_window(WORKSPACEID workspace, Direction direction) {
+void ScrollerLayout::move_window(WORKSPACEID workspace, Direction direction, bool nomode) {
     auto s = getRowForWorkspace(workspace);
     if (s == nullptr) {
         return;
     }
 
-    s->move_active_column(direction);
+    if (nomode)
+        s->move_active_window(direction);
+    else
+        s->move_active_column(direction);
 }
 
 void ScrollerLayout::align_window(WORKSPACEID workspace, Direction direction) {
@@ -926,20 +939,20 @@ void ScrollerLayout::align_window(WORKSPACEID workspace, Direction direction) {
     s->align_column(direction);
 }
 
-void ScrollerLayout::admit_window_left(WORKSPACEID workspace) {
+void ScrollerLayout::admit_window(WORKSPACEID workspace, AdmitExpelDirection direction) {
     auto s = getRowForWorkspace(workspace);
     if (s == nullptr) {
         return;
     }
-    s->admit_window_left();
+    s->admit_window(direction);
 }
 
-void ScrollerLayout::expel_window_right(WORKSPACEID workspace) {
+void ScrollerLayout::expel_window(WORKSPACEID workspace, AdmitExpelDirection direction) {
     auto s = getRowForWorkspace(workspace);
     if (s == nullptr) {
         return;
     }
-    s->expel_window_right();
+    s->expel_window(direction);
 }
 
 void ScrollerLayout::set_mode(WORKSPACEID workspace, Mode mode) {
@@ -1227,6 +1240,10 @@ static std::string generate_label(unsigned int i, const std::string &keys, unsig
 }
 
 void ScrollerLayout::jump() {
+    if (jumping)
+        return;
+
+    jumping = true;
     jump_data = new JumpData;
 
     for (auto monitor : g_pCompositor->m_vMonitors) {
@@ -1242,6 +1259,7 @@ void ScrollerLayout::jump() {
     }
     if (jump_data->workspaces.size() == 0) {
         delete jump_data;
+        jumping = false;
         return;
     }
 
@@ -1250,6 +1268,7 @@ void ScrollerLayout::jump() {
     }
     if (jump_data->windows.size() == 0) {
         delete jump_data;
+        jumping = false;
         return;
     }
 
@@ -1260,6 +1279,7 @@ void ScrollerLayout::jump() {
 
     if (jump_data->keys.size() == 1 && jump_data->windows.size() > 1) {
         delete jump_data;
+        jumping = false;
         return;
     }
     if (jump_data->windows.size() == 1)
@@ -1346,6 +1366,7 @@ void ScrollerLayout::jump() {
         info.cancelled = true;
         jump_data->keyPressHookCallback.reset();
         delete jump_data;
+        jumping = false;
     });
 }
 
@@ -1381,9 +1402,9 @@ void ScrollerLayout::swipe_update(SCallbackInfo &info, IPointer::SSwipeUpdateEve
     static auto *const *HSFINGERSMIN = (Hyprlang::INT *const *)HyprlandAPI::getConfigValue(PHANDLE, "gestures:workspace_swipe_min_fingers")->getDataStaticPtr();
     static auto *const *NATURAL = (Hyprlang::INT *const *)HyprlandAPI::getConfigValue(PHANDLE, "input:touchpad:natural_scroll")->getDataStaticPtr();
     static auto *const *HSINVERT = (Hyprlang::INT *const *)HyprlandAPI::getConfigValue(PHANDLE, "gestures:workspace_swipe_invert")->getDataStaticPtr();
+    static auto *const *GSENS = (Hyprlang::FLOAT *const *)HyprlandAPI::getConfigValue(PHANDLE, "plugin:scroller:gesture_sensitivity")->getDataStaticPtr();
     static auto *const *SENABLE = (Hyprlang::INT *const *)HyprlandAPI::getConfigValue(PHANDLE, "plugin:scroller:gesture_scroll_enable")->getDataStaticPtr();
     static auto *const *SFINGERS = (Hyprlang::INT *const *)HyprlandAPI::getConfigValue(PHANDLE, "plugin:scroller:gesture_scroll_fingers")->getDataStaticPtr();
-    static auto *const *SDISTANCE = (Hyprlang::INT *const *)HyprlandAPI::getConfigValue(PHANDLE, "plugin:scroller:gesture_scroll_distance")->getDataStaticPtr();
     static auto *const *OENABLE = (Hyprlang::INT *const *)HyprlandAPI::getConfigValue(PHANDLE, "plugin:scroller:gesture_overview_enable")->getDataStaticPtr();
     static auto *const *OFINGERS = (Hyprlang::INT *const *)HyprlandAPI::getConfigValue(PHANDLE, "plugin:scroller:gesture_overview_fingers")->getDataStaticPtr();
     static auto *const *ODISTANCE = (Hyprlang::INT *const *)HyprlandAPI::getConfigValue(PHANDLE, "plugin:scroller:gesture_overview_distance")->getDataStaticPtr();
@@ -1407,7 +1428,7 @@ void ScrollerLayout::swipe_update(SCallbackInfo &info, IPointer::SSwipeUpdateEve
 
     info.cancelled = true;
     Vector2D delta = swipe_event.delta;
-    delta *= **NATURAL ? -1.0 : 1.0;
+    delta *= **NATURAL ? **GSENS : -**GSENS;
     if (!swipe_active) {
         gesture_delta = Vector2D(0.0, 0.0);
     }
@@ -1416,38 +1437,11 @@ void ScrollerLayout::swipe_update(SCallbackInfo &info, IPointer::SSwipeUpdateEve
     if (**SENABLE && swipe_event.fingers == **SFINGERS) {
         if (s == nullptr)
             return;
-        int steps_x = gesture_delta.x / **SDISTANCE;
-        int steps_y = gesture_delta.y / **SDISTANCE;
-        gesture_delta.x -= steps_x * **SDISTANCE;
-        gesture_delta.y -= steps_y * **SDISTANCE;
-        Direction dir;
-        int steps;
-        if (std::abs(steps_x) > std::abs(steps_y)) {
-            dir = steps_x < 0 ? Direction::Left : Direction::Right;
-            steps = std::abs(steps_x);
-        } else {
-            dir = steps_y < 0 ? Direction::Up : Direction::Down;
-            steps = std::abs(steps_y);
-        }
-        if (swipe_direction != dir) {
-            gesture_delta = Vector2D(0.0, 0.0);
-            swipe_direction = dir;
-        }
-        for (int i = 0; i < steps; ++i) {
-            switch (dir) {
-            case Direction::Left:
-            case Direction::Right:
-            case Direction::Up:
-            case Direction::Down:
-                s->move_focus(dir, false);
-                // To avoid going to the next monitor, stays in s
-                force_focus_to_window(s->get_active_window());
-                break;
-            default:
-                break;
-            }
-        }
-        s->recalculate_row_geometry();
+        if (std::abs(gesture_delta.x) > std::abs(gesture_delta.y))
+            swipe_direction = gesture_delta.x > 0 ? Direction::Right : Direction::Left;
+        else
+            swipe_direction = gesture_delta.y > 0 ? Direction::Down : Direction::Up;
+        s->scroll_update(swipe_direction, delta);
     } else {
         // Undo natural
         const Vector2D delta = gesture_delta * (**NATURAL ? -1.0 : 1.0);
@@ -1491,9 +1485,44 @@ void ScrollerLayout::swipe_end(SCallbackInfo &info,
     if (wid == -1) {
         return;
     }
+    // Only if scrolling
+    if (swipe_direction != Direction::Begin) {
+        auto s = getRowForWorkspace(wid);
+        s->scroll_end(swipe_direction);
+    }
 
     swipe_active = false;
     gesture_delta = Vector2D(0.0, 0.0);
     swipe_direction = Direction::Begin;
     info.cancelled = true;
+}
+
+void ScrollerLayout::mouse_move(SCallbackInfo& info, const Vector2D &mousePos) {
+    static bool inside = false;
+    auto PMONITOR = g_pCompositor->getMonitorFromVector(mousePos);
+    WORKSPACEID workspace_id = PMONITOR->activeWorkspaceID();
+    auto s = getRowForWorkspace(workspace_id);
+    if (s != nullptr) {
+        Box box = { PMONITOR->vecPosition + PMONITOR->vecReservedTopLeft,
+                    PMONITOR->vecSize - PMONITOR->vecReservedTopLeft - PMONITOR->vecReservedBottomRight};
+
+        if (!s->get_max().contains_point(mousePos) && box.contains_point(mousePos)) {
+            // We are in gaps_out territory
+            static auto *const *TIMEOUT = (Hyprlang::INT *const *)HyprlandAPI::getConfigValue(PHANDLE, "plugin:scroller:focus_edge_ms")->getDataStaticPtr();
+            static auto enteredTime = std::chrono::high_resolution_clock::now();
+            auto eventTime = std::chrono::high_resolution_clock::now();
+            if (!inside) {
+                inside = true;
+                enteredTime = eventTime;
+                info.cancelled = true;
+                return;
+            } else {
+                if (std::chrono::duration_cast<std::chrono::milliseconds>(eventTime - enteredTime).count() < **TIMEOUT) {
+                    info.cancelled = true;
+                    return;
+                }
+            }
+        }
+    }
+    inside = false;
 }

@@ -7,7 +7,7 @@
 
 class Window {
 public:
-    Window(PHLWINDOW window, double maxy, double box_h);
+    Window(PHLWINDOW window, double maxy, double box_h, StandardSize width);
     ~Window() {
         window->removeWindowDeco(decoration);
     }
@@ -41,12 +41,28 @@ public:
     void update_height(StandardSize h, double max);
     void set_height_free() { height = StandardSize::Free; }
 
+    // Called by the parent column on the active window every time it changes width
+    // This allows windows to have a independently stored width when they leave
+    // the column
+    void set_width(StandardSize w) { width = w; }
+    StandardSize get_width() const { return width; }
+    void set_geom_w(double geomw, const Vector2D &gap_x) {
+        SBoxExtents reserved_area = window->getFullWindowReservedArea();
+        Vector2D topL = reserved_area.topLeft, botR = reserved_area.bottomRight;
+        geom_w = geomw - topL.x - botR.x - gap_x.x - gap_x.y;
+    }
+    double get_geom_w(const Vector2D &gap_x) const {
+        SBoxExtents reserved_area = window->getFullWindowReservedArea();
+        Vector2D topL = reserved_area.topLeft, botR = reserved_area.bottomRight;
+        return geom_w + topL.x + botR.x + gap_x.x + gap_x.y;
+    }
+
     void set_geometry(const Box &box) {
         window->m_vPosition = Vector2D(box.x, box.y);
         window->m_vSize = Vector2D(box.w, box.h);
         *window->m_vRealPosition = window->m_vPosition;
         *window->m_vRealSize = window->m_vSize;
-        window->sendWindowSize(window->m_vRealSize->goal());
+        window->sendWindowSize();
     }
     bool is_window(PHLWINDOW w) const {
         return window == w;
@@ -66,7 +82,7 @@ public:
         window->m_vSize = Vector2D(std::max(window->m_vSize.x, 1.0), std::max(window->m_vSize.y, 1.0));
         *window->m_vRealSize = window->m_vSize;
         *window->m_vRealPosition = window->m_vPosition;
-        window->sendWindowSize(window->m_vRealSize->goal());
+        window->sendWindowSize();
     }
 
     void move_to_bottom(double x, const Box &max, const Vector2D &gap_x, double gap) {
@@ -90,13 +106,21 @@ public:
         window->m_vPosition = Vector2D(x + topL.x + gap_x.x, y + gap + topL.y);
     }
 
-    void update_window(double w, const Vector2D &gap_x, double gap0, double gap1) {
+    void scroll(double delta_y) {
+        window->m_vPosition.y += delta_y;
+        window->m_vRealPosition->warp(false);
+        *window->m_vRealPosition = window->m_vPosition;
+    }
+
+    void update_window(double w, const Vector2D &gap_x, double gap0, double gap1, bool animate) {
         auto reserved = window->getFullWindowReservedArea();
         //win->m_vSize = Vector2D(w - gap_x.x - gap_x.y, wh - gap0 - gap1);
         window->m_vSize = Vector2D(std::max(w - reserved.topLeft.x - reserved.bottomRight.x - gap_x.x - gap_x.y, 1.0), std::max(get_geom_h() - reserved.topLeft.y - reserved.bottomRight.y - gap0 - gap1, 1.0));
+        if (!animate)
+            window->m_vRealPosition->warp(false);
         *window->m_vRealPosition = window->m_vPosition;
         *window->m_vRealSize = window->m_vSize;
-        window->sendWindowSize(window->m_vRealSize->goal());
+        window->sendWindowSize();
     }
     bool can_resize_width(double geomw, double maxw, const Vector2D &gap_x, double gap, double deltax) {
         // First, check if resize is possible or it would leave any window
@@ -180,11 +204,20 @@ private:
         w->m_vSize = mem.vSize;
         *w->m_vRealPosition = w->m_vPosition;
         *w->m_vRealSize = w->m_vSize;
-        w->sendWindowSize(w->m_vRealSize->goal());
+        w->sendWindowSize();
     }
 
     PHLWINDOWREF window;
     StandardSize height;
+    // This keeps track of the window width and recovers it when it is alone
+    // in a column. When it is in a column with more windows, the active window
+    // has this value synced with the column width. So this value changes when
+    // the window is active and resized by its parent column resize.
+    StandardSize width;
+    // Windows store their `resizeActiveWindow` width, so it can be recovered
+    // when their mode changes to StandardSize::FREE. This is necessary because
+    // their window->m_vSize changes.
+    double geom_w;
     double box_h;
     Memory mem_ov, mem_fs;   // memory to store old height and win y when in overview/fullscreen modes
     bool selected;

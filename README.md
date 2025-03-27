@@ -26,7 +26,7 @@ that front.
 ## Requirements
 
 *hyprscroller* supports the version of *Hyprland* I use, which should be the
-same as the Arch Linux `hyprland` package (v0.47.2). You can try your luck with the
+same as the Arch Linux `hyprland` package (v0.48.0). You can try your luck with the
 latest `git` changes, but I will be slower to keep up with those, as there are
 too many API changes going on upstream.
 
@@ -81,9 +81,11 @@ hyprctl plugin load /home/xxxx/.config/hypr/plugins/hyprscroller.so
 
 ### NixOS
 
-I don't use NixOS, so the "flakes" in this repo are maintained by users, and
-may not be up to date. However, it seems *hyprscroller* is now an official
-unstable package in [nixpkgs](https://search.nixos.org/packages?channel=unstable&from=0&size=50&sort=relevance&type=packages&query=hyprlandPlugins.hyprscroller) so you can install it from there.
+*hyprscroller* is now an official unstable package in [nixpkgs](https://search.nixos.org/packages?channel=unstable&from=0&size=50&sort=relevance&type=packages&query=hyprlandPlugins.hyprscroller),
+so you can install it from there. I don't maintain *flakes* any more because
+they were usually very out of date and I don't know enough about NixOS to keep
+them alive. If you need a newer version than the NixOS package, I recommend you
+temporarily use `hyprpm`.
 
 
 ## Configuration
@@ -123,7 +125,7 @@ The plugin adds the following dispatchers:
 | Dispatcher                    | Description                                                                                                                      |
 |-------------------------------|----------------------------------------------------------------------------------------------------------------------------------|
 | `scroller:movefocus`          | An optional replacement for `movefocus`, takes a direction as argument.                                                          |
-| `scroller:movewindow`         | An optional replacement for `movewindow`, takes a direction as argument.                                                         |
+| `scroller:movewindow`         | An optional replacement for `movewindow`, takes a direction and a movement mode as arguments.                                    |
 | `scroller:setmode`            | Set mode: `r/row` (default), `c/col/column`. Sets the working mode. Affects most dispatchers and new window creation.            |
 | `scroller:setmodemodifier`    | Assigns modifiers to the current mode for window creation: position, focus/nofocus, manual/auto. Description [below](#modes)     |
 | `scroller:cyclesize`          | Resize the focused column width (*row* mode), or the active window height (*column* mode).                                       |
@@ -133,8 +135,8 @@ The plugin adds the following dispatchers:
 | `scroller:setwidth`           | Set the focused column width to one of `column_widths`. Takes an int value (0-based idx of the size in `column_widths`), or a string indicating the desired width  |
 | `scroller:setheight`          | Set the active window height to one of `window_heights`. Parameter similar to `setwidth`                                         |
 | `scroller:alignwindow`        | Align window on the screen, `l/left`, `c/center`, `r/right` (*row* mode), `c/center`, `u/up`, `d/down` (*col* mode), `m/middle`  |
-| `scroller:admitwindow`        | Push the current window below the active one of the column to its left.                                                          |
-| `scroller:expelwindow`        | Pop the current window out of its column and place it on a new column to the right.                                              |
+| `scroller:admitwindow`        | Accepts an optional direction parameter (`l/left` (default) or `r/right`). Push the current window below the active one of the column in that direction. |
+| `scroller:expelwindow`        | Accepts an optional direction parameter (`l/left` or `r/right` (default)). Pop the current window out of its column and place it on a new column to the right or left. |
 | `scroller:fitsize`            | Resize columns (*row* mode) or windows (*col* mode) so they fit on the screen: `active`, `visible`, `all`, `toend`, `tobeg`      |
 | `scroller:fitwidth`           | Resize columns so they fit on the screen: `active`, `visible`, `all`, `toend`, `tobeg`                                           |
 | `scroller:fitheight`          | Resize windows for the active column so they fit on the screen: `active`, `visible`, `all`, `toend`, `tobeg`                     |
@@ -198,14 +200,23 @@ column before creating a new column. In *column* mode, *hyprscroller* will
 create as many as `number` columns before adding new windows to any of them.
 If you close any window, `auto` mode will start filling the gaps with new
 windows you create.
+4. `center_column/nocenter_column`: It will keep the active column centered
+(or not) on the screen. The default value is the one in your configuration.
+See [center_active_column](https://github.com/dawsers/hyprscroller#center_active_column).
+4. `center_window/nocenter_window`: It will keep the active window centered
+(or not) in its column. The default value is the one in your configuration.
+See [center_active_window](https://github.com/dawsers/hyprscroller#center_active_window).
+
+You can skip any number of parameters when calling the dispatcher, and their
+order doesn't matter.
 
 You can change modifiers at any time using `scoller:setmodemodifier`, which
 works like this:
 
 ```
-# scroller:setmodemodifier, position, focus, auto, number
+# scroller:setmodemodifier, position, focus, auto:number, center_column, center_window
 # examples
-hyprctl dispatch scroller:setmodemodifier before, nofocus, auto, 3
+hyprctl dispatch scroller:setmodemodifier before, nofocus, auto:3
 # creates new windows at the end of the row/column and doesn't focus on them
 hyprctl dispatch scroller:setmodemodifier end, nofocus
 # sets manual mode with no focus on new windows
@@ -213,7 +224,9 @@ hyprctl dispatch scroller:setmodemodifier , nofocus, manual
 # default values
 hyprctl dispatch scroller:setmodemodifier after, focus, manual
 # sets auto mode with a grid of 4 windows
-hyprctl dispatch scroller:setmodemodifier , , auto, 4
+hyprctl dispatch scroller:setmodemodifier , auto:4
+# keeps the active column always centered
+hyprctl dispatch scroller:setmodemodifier , center_column
 ```
 
 You can skip any parameters. If you don't specify some of them, they will merge
@@ -256,6 +269,10 @@ submap = reset
 There is also an IPC event with details of the current mode and modifiers.
 Read [this](#ipc) for an example
 
+You can also set a window rule for each new window to follow a certain
+combination of mode and mode modifiers. See [window rules](#window-rules) for
+more details.
+
 
 ## Window/Column Focus and Movement
 
@@ -270,6 +287,17 @@ was the case in the past.
 `l` or `left`, `r` or `right`, `u` or `up`, `d` or `dn` or `down`, `b` or
 `begin` or `beginning`, `e` or `end`. So you can focus or move windows/columns
 in a direction or to the beginning or end or the row.
+
+Additionally, `movewindow` accepts an additional, optional, parameter: `nomode`
+If `nomode` is added to the dispatcher, movement will **only** move the active
+window, leaving its column intact, regardless of which *mode* (row/column) you
+are currently in. The movement will be like this:
+
+If the window is in some column with other windows, any `left` or `right`
+movement will `expel` it to that side, creating a new column with just that
+window. Moving it again will `admit` it in the column in the direction of
+movement, and so on. Moving the window `up` or `down` will simply move it in
+its current column.
 
 
 ## Resizing
@@ -342,12 +370,14 @@ regardless of which mode you are in, use *middle*.
 
 ## Admit/Expel
 
-You can create columns of windows using `admitwindow`. It takes the active
-window and moves it to the column left of its current one, right under the
-active window in that column.
+You can create columns of windows using `admitwindow`. It takes an optional
+direction parameter `l/left` (default) or `r/right`. The dispatcher takes the
+active window and moves it to the column in the parameter direction from its
+current one, right under the active window in that column.
 
 To expel any window from its current column and position it in a new column to
-its right, use `expelwindow`.
+its right or left, use `expelwindow`. It also takes the same `l/left` or `r/right`
+(default) parameter.
 
 
 ## Fitting the Screen
@@ -541,12 +571,18 @@ and trailmark dispatchers.
 
 ## Touchpad Gestures
 
-There are options to enable/disable touchpad gestures for `movefocus`
-(scrolling), `overview` and `workspace` change.
+There are options to enable/disable touchpad gestures for scrolling, `overview`
+and `workspace` change.
 
 The default for scrolling is swiping with three fingers to scroll left, right,
 up or down. Four fingers up enables the *overview* mode, down disables it.
 To change workspace, swipe right or left, also with four fingers.
+
+When swiping vertically (a column), *hyprscroller* will scroll the column
+that contains the mouse pointer. This allows you to scroll columns that are
+not the active one if your Hyprland `input:follow_mouse` setting decouples focusing
+from mouse pointer position (value other than `1`). Read Hyprland's
+[Wiki](https://wiki.hyprland.org/Configuring/Variables/#input) for more details.
 
 You can enable/disable any of the three gestures. But if you want to have the
 three enabled, note that scrolling needs the two axes, horizontal and
@@ -824,6 +860,28 @@ Determines whether focus will *wrap* when at the first or
 last window of a row/column. Possible arguments are: `true`|`1` (default), or
 `false`|`0`.
 
+### `focus_edge_ms`
+
+When your Hyprland setting for `input:follow_mouse` is `0` or `1`, Hyprland
+will change focus to the window where your mouse cursor is. *hyprscroller*
+can have windows outside of the viewport. If your `gaps_out` setting allows
+you to see part of those windows, mouse focusing can trigger a refocus when
+your mouse is over the gap at the edge of the monitor. This can sometimes
+create a series of unwanted focusing events that move focus away, and can be
+quite distracting.
+
+`focus_edge_ms` is a timeout value (default is 400 ms). When your mouse is
+over the edge of the monitor's gap, refocusing on the window under that gap
+will be delayed for this time value. If you didn't want to focus, you can
+still escape! If you actually want to scroll and focus, keep the mouse inside
+the gap for the timeout value. On your next mouse movement, *hyprscroller*
+will scroll to the partially seen window. Note you need to move your mouse
+again after the timeout value, this is attached to the `mouseMove` event, so
+even if you keep the mouse over the gap for longer than the timeout, the
+event won't be triggered until your next mouse movement. The easiest way to
+scroll is to flick the mouse inside and outside of the gap to make sure you
+only scroll once.
+
 ### `cyclesize_wrap`
 
 If `true`, `cyclesize`, `cyclewidth` and `cycleheight` will cycle through all
@@ -847,6 +905,17 @@ Possible arguments are: `true`|`1` (default), or `false`|`0`.
 If there is empty space in the viewport, the row will be centered, leaving the
 same amount of empty space on each side (respecting `gaps_out`). Possible
 arguments are: `false`|`0` (default), or `true`|`1`.
+
+### `center_active_column`
+
+It `true`, the active column will always be centered on the screen. Possible
+values for the argument are: `false`|`0` (default), or `true`|`1`.
+
+### `center_active_window`
+
+It `true`, the active window (active window of the active column) will always
+be centered on the screen. Possible values for the argument are:
+`false`|`0` (default), or `true`|`1`.
 
 ### `overview_scale_content`
 
@@ -951,6 +1020,12 @@ orientations (for example portrait instead of landscape). You can define any
 combination. You can also use a configuration per monitor when you have very
 different geometries, for example a laptop and an external, bigger monitor.
 
+### `gesture_sensitivity`
+
+This is a positive floating point value. The default is `1.0`. If you want to make
+scrolling more sensitive, increase the value (`2.0` for example). If it is too
+sensitive, try using a fraction of `1.0` (`0.5` for example).
+
 ### `gesture_scroll_enable`
 
 `true` (default) or `false`. Enables or disables touchpad gestures for
@@ -959,12 +1034,6 @@ scrolling (changing focus).
 ### `gesture_scroll_fingers`
 
 Integer value, default is `3`. Number of fingers used to swipe when scrolling.
-
-### `gesture_scroll_distance`
-
-Integer value, default is `60`. Delta generated by swiping to move focus one
-window. It is like a sensitivity value; the smaller, the more sensitive
-scrolling will be to swipes.
 
 ### `gesture_overview_enable`
 
@@ -1062,6 +1131,22 @@ explains what Window Rules are, and how to enable and configure them.
 ### Static Window Rules
 
 These are rules specific to *hyprscroller*
+
+#### modemodifier
+
+Use this rule when you want to open a certain window overriding the current
+mode or its modifiers. This doesn't change the mode or its modifiers, it only
+affects the window matching the rule.
+
+**Syntax of rule:** `plugin:scroller:modemodifier row|column after|before|end|beginning focus|nofocus`
+
+For example, the following rule will always open kitty windows in column mode,
+before the active window and won't focus on the new window.
+
+```
+windowrulev2 = plugin:scroller:modemodifier col before nofocus, class:(kitty)
+```
+
 
 #### group
 
@@ -1162,6 +1247,12 @@ bind = $mainMod CTRL, up, movewindow, u
 bind = $mainMod CTRL, down, movewindow, d
 bind = $mainMod CTRL, home, scroller:movewindow, begin
 bind = $mainMod CTRL, end, scroller:movewindow, end
+bind = $mainMod ALT, left, movewindow, l, nomode
+bind = $mainMod ALT, right, movewindow, r, nomode
+bind = $mainMod ALT, up, movewindow, u, nomode
+bind = $mainMod ALT, down, movewindow, d, nomode
+bind = $mainMod ALT, home, scroller:movewindow, begin, nomode
+bind = $mainMod ALT, end, scroller:movewindow, end, nomode
 
 # Modes
 bind = $mainMod, bracketleft, scroller:setmode, row
@@ -1180,16 +1271,24 @@ bind = , home, scroller:setmodemodifier, beginning
 bind = , home, submap, reset
 bind = , end, scroller:setmodemodifier, end
 bind = , end, submap, reset
-bind = , up, scroller:setmodemodifier, , focus
+bind = , up, scroller:setmodemodifier, focus
 bind = , up, submap, reset
-bind = , down, scroller:setmodemodifier, , nofocus
+bind = , down, scroller:setmodemodifier, nofocus
 bind = , down, submap, reset
-bind = , 2, scroller:setmodemodifier, , , auto, 2
+bind = , 2, scroller:setmodemodifier, auto:2
 bind = , 2, submap, reset
-bind = , 3, scroller:setmodemodifier, , , auto, 3
+bind = , 3, scroller:setmodemodifier, auto:3
 bind = , 3, submap, reset
-bind = , m, scroller:setmodemodifier, , , manual
+bind = , m, scroller:setmodemodifier, manual
 bind = , m, submap, reset
+bind = , c, scroller:setmodemodifier, center_column
+bind = , c, submap, reset
+bind = SHIFT, c, scroller:setmodemodifier, nocenter_column
+bind = SHIFT, c, submap, reset
+bind = , w, scroller:setmodemodifier, center_window
+bind = , w, submap, reset
+bind = SHIFT, w, scroller:setmodemodifier, nocenter_window
+bind = SHIFT, w, submap, reset
 # use reset to go back to the global submap
 bind = , escape, submap, reset
 # will reset the submap, meaning end the current one and return to the global one
@@ -1241,6 +1340,8 @@ submap = reset
 # Admit/Expel
 bind = $mainMod, I, scroller:admitwindow,
 bind = $mainMod, O, scroller:expelwindow,
+bind = $mainMod SHIFT, I, scroller:admitwindow, r
+bind = $mainMod SHIFT, O, scroller:expelwindow, l
 
 # Center submap
 # will switch to a submap called center

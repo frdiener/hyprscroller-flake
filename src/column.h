@@ -9,7 +9,7 @@ class Row;
 
 class Column {
 public:
-    Column(PHLWINDOW cwindow, double maxw, const Row *row);
+    Column(PHLWINDOW cwindow, const Row *row);
     Column(Window *window, StandardSize width, double maxw, const Row *row);
     Column(const Row *row, const Column *column, List<Window *> &windows);
     ~Column();
@@ -84,7 +84,7 @@ public:
         geom.vy = vy;
     }
     // Recalculates the geometry of the windows in the column
-    void recalculate_col_geometry(const Vector2D &gap_x, double gap);
+    void recalculate_col_geometry(const Vector2D &gap_x, double gap, bool animate);
     // Recalculates the geometry of the windows in the column for overview mode
     void recalculate_col_geometry_overview(const Vector2D &gap_x, double gap);
     PHLWINDOW get_active_window() {
@@ -95,7 +95,7 @@ public:
     bool move_focus_up(bool focus_wrap);
     bool move_focus_down(bool focus_wrap);
     void admit_window(Window *window);
-    Window *expel_active();
+    Window *expel_active(const Vector2D &gap_x);
     void align_window(Direction direction, const Vector2D &gap_x, double gap);
 
     StandardSize get_width() const {
@@ -107,7 +107,7 @@ public:
     }
     // Update heights according to new maxh
     void update_heights();
-    void update_width(StandardSize cwidth, double maxw);
+    void update_width(StandardSize cwidth, double maxw, bool internal_too = true);
     void fit_size(FitSize fitsize, const Vector2D &gap_x, double gap);
     void cycle_size_active_window(int step, const Vector2D &gap_x, double gap);
     void size_active_window(StandardSize height, const Vector2D &gap_x, double gap);
@@ -119,10 +119,12 @@ public:
     Column *selection_get(const Row *row);
     bool selection_exists() const;
     void pin(bool pin) const;
+    void scroll_update(double delta_y);
+    void scroll_end(Direction dir, double gap);
 
 private:
     // Adjust all the windows in the column using 'window' as anchor
-    void adjust_windows(ListNode<Window *> *win, const Vector2D &gap_x, double gap);
+    void adjust_windows(ListNode<Window *> *win, const Vector2D &gap_x, double gap, bool animate);
 
     struct ColumnGeom {
         double x;
@@ -133,7 +135,6 @@ private:
         ColumnGeom geom;        // memory of the column's box while in overview mode
     };
     StandardSize width;
-    StandardSize height;
     Reorder reorder;
     ColumnGeom geom; // x location and width of the column
     Memory mem;      // memory

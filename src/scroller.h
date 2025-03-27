@@ -48,10 +48,10 @@ public:
     void set_window_width(WORKSPACEID workspace, const std::string &arg);
     void set_window_height(WORKSPACEID workspace, const std::string &arg);
     void move_focus(WORKSPACEID workspace, Direction);
-    void move_window(WORKSPACEID workspace, Direction);
+    void move_window(WORKSPACEID workspace, Direction, bool);
     void align_window(WORKSPACEID workspace, Direction);
-    void admit_window_left(WORKSPACEID workspace);
-    void expel_window_right(WORKSPACEID workspace);
+    void admit_window(WORKSPACEID workspace, AdmitExpelDirection direction);
+    void expel_window(WORKSPACEID workspace, AdmitExpelDirection direction);
     void set_mode(WORKSPACEID workspace, Mode);
     void set_mode_modifier(WORKSPACEID workspace, const ModeModifier &);
     void fit_size(WORKSPACEID workspace, FitSize);
@@ -90,6 +90,8 @@ public:
     void swipe_update(SCallbackInfo& info, IPointer::SSwipeUpdateEvent);
     void swipe_end(SCallbackInfo& info, IPointer::SSwipeEndEvent);
 
+    void mouse_move(SCallbackInfo& info, const Vector2D &mousePos);
+
     bool is_enabled() const { return enabled; }
 
 private:
@@ -103,6 +105,7 @@ private:
     Vector2D gesture_delta;
     bool swipe_active;
     Direction swipe_direction;
+    bool jumping = false;
 };
 
 #endif  // SCROLLER_SCROLLER_H

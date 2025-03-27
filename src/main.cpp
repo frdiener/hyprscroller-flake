@@ -34,12 +34,18 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:scroller:window_default_height", Hyprlang::STRING{"one"});
     // 0, 1
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:scroller:focus_wrap", Hyprlang::INT{1});
+    // 0, inf
+    HyprlandAPI::addConfigValue(PHANDLE, "plugin:scroller:focus_edge_ms", Hyprlang::INT{400});
     // 0, 1
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:scroller:cyclesize_wrap", Hyprlang::INT{1});
     // 0, 1
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:scroller:cyclesize_closest", Hyprlang::INT{1});
     // 0, 1
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:scroller:center_row_if_space_available", Hyprlang::INT{0});
+    // 0, 1
+    HyprlandAPI::addConfigValue(PHANDLE, "plugin:scroller:center_active_window", Hyprlang::INT{0});
+    // 0, 1
+    HyprlandAPI::addConfigValue(PHANDLE, "plugin:scroller:center_active_column", Hyprlang::INT{0});
     // 0, 1
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:scroller:overview_scale_content", Hyprlang::INT{1});
     // a list of values used as standard widths for cyclesize in row mode, and in the cycling order
@@ -61,11 +67,11 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     // monitor_options = ( DP-2 = ( mode = col; column_default_width = onethird; window_default_height = onehalf), HDMI-A-1 = ())
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:scroller:monitor_options", Hyprlang::STRING{""});
     //Enable gestures
+    HyprlandAPI::addConfigValue(PHANDLE, "plugin:scroller:gesture_sensitivity", Hyprlang::FLOAT{1.0});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:scroller:gesture_overview_enable", Hyprlang::INT{1});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:scroller:gesture_overview_distance", Hyprlang::INT{5});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:scroller:gesture_overview_fingers", Hyprlang::INT{4});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:scroller:gesture_scroll_enable", Hyprlang::INT{1});
-    HyprlandAPI::addConfigValue(PHANDLE, "plugin:scroller:gesture_scroll_distance", Hyprlang::INT{60});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:scroller:gesture_scroll_fingers", Hyprlang::INT{3});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:scroller:gesture_workspace_switch_enable", Hyprlang::INT{1});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:scroller:gesture_workspace_switch_distance", Hyprlang::INT{5});

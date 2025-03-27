@@ -61,8 +61,9 @@ public:
     bool selection_exists() const;
     void move_active_window_to_group(const std::string &name);
     void move_active_column(Direction dir);
-    void admit_window_left();
-    void expel_window_right();
+    void move_active_window(Direction dir);
+    void admit_window(AdmitExpelDirection dir);
+    void expel_window(AdmitExpelDirection dir);
     Vector2D predict_window_size() const;
     void post_event(const std::string &event);
     // Returns the old viewport
@@ -74,6 +75,9 @@ public:
     void toggle_overview();
     void update_windows(const Box &oldmax, bool force);
     void recalculate_row_geometry();
+
+    void scroll_update(Direction dir, const Vector2D &delta);
+    void scroll_end(Direction dir);
 
 private:
     bool move_focus_left(bool focus_wrap); 
@@ -88,6 +92,7 @@ private:
     // Adjust all the columns in the overview
     void adjust_overview_columns();
     void size_active_column(StandardSize size);
+    ListNode<Column *> *get_mouse_column() const;
 
     WORKSPACEID workspace;
     Box full;

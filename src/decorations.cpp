@@ -151,9 +151,7 @@ eDecorationLayer SelectionBorders::getDecorationLayer() {
 }
 
 uint64_t SelectionBorders::getDecorationFlags() {
-    static auto PPARTOFWINDOW = CConfigValue<Hyprlang::INT>("general:border_part_of_window");
-
-    return *PPARTOFWINDOW && !doesntWantBorders() ? DECORATION_PART_OF_MAIN_WINDOW : 0;
+    return !doesntWantBorders() ? DECORATION_PART_OF_MAIN_WINDOW : 0;
 }
 
 std::string SelectionBorders::getDisplayName() {
@@ -249,7 +247,7 @@ void JumpDecoration::damageEntire() {
 }
 
 eDecorationLayer JumpDecoration::getDecorationLayer() {
-    return DECORATION_LAYER_OVERLAY;
+    return DECORATION_LAYER_OVER;
 }
 
 uint64_t JumpDecoration::getDecorationFlags() {
